@@ -18,7 +18,7 @@ def basic_reward(output, target):
 
     return extracted == target
 
-def compute_reward(output, target):
+def compute_rewards(output, target):
     cur_reward = 0
     cur_reward += format_reward(output, target)
     cur_reward += basic_reward(output, target)
@@ -38,6 +38,21 @@ def eval_reward(output, target):
         return 1
     else:
         return 0
+
+
+def compute_log_probs(model, outputs, prompt_length):
+    logits, _ = model(outputs)
+    # logits.shape = (prompt_length + answers_length + 1, batch_size * num_samples, vocab_size)
+
+    # we only need the log probabilities for the new tokens
+    # this introduces a shift: the logits for a position are the predictions for the next token
+    logits = logits[prompt_length-1:-1, :, :]
+    # logits.shape = (answers_length + 1, batch_size * num_samples, vocab_size)
+
+    # convert raw logits into log probabilities along the vocabulary axis
+    log_probs = F.log_softmax(logits, dim=-1)
+    # log_probs.shape = (answers_length + 1, batch_size * num_samples, vocab_size)
+    return log_probs
 
 
 def calculate_grpo_advantages(rewards, num_samples):

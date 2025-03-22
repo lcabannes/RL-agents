@@ -2,7 +2,8 @@ import time
 import torch
 from copy import deepcopy
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from utils import get_dataset, compute_log_probs, compute_rewards, compute_ppo_loss, calculate_grpo_advantages
+from rewards import compute_log_probs, compute_rewards, compute_ppo_loss, calculate_grpo_advantages
+from data import get_dataset
 
 def evaluate():
     pass
@@ -31,7 +32,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # smollm 
-model_id = "HuggingFaceTB/SmolLM-135-Instruct"
+model_id = "HuggingFaceTB/SmolLM-135m-Instruct"
 model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
