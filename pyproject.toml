@@ -1,0 +1,13 @@
+[project]
+name = "rl-agents"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "datasets>=3.4.1",
+    "ipykernel>=6.29.5",
+    "numpy>=2.2.4",
+    "torch>=2.6.0",
+    "transformers>=4.50.0",
+]
