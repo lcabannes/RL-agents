@@ -4,6 +4,7 @@ from torch.nn import functional as F
 from tools.calculator import calculator
 
 pattern = "<answer>(.*?)</answer>"
+calculator_pattern = "<answer>calculator\\((.*?)\\)</answer>"
 eps = 0.2
 beta = 0.01
 
@@ -49,6 +50,13 @@ def compute_rewards(outputs, target):
 
 def calculator_format_reward(output, target):
 
+    extracted = re.findall(calculator_pattern, output)
+    if len(extracted) == 0:
+        return -1
+    elif len(extracted[0]) > 0:
+        return 1
+    else:
+        return 0
     try:
         calculator(output)
         return 1
@@ -56,9 +64,16 @@ def calculator_format_reward(output, target):
         return -1
 
 def calculator_accuracy_reward(output, target):
+    extracted = re.findall(calculator_pattern, output)
+    if len(extracted) == 0:
+        return 0
+    elif len(extracted[0]) == 0:
+        return 0
+    
+    output = extracted[0]
     try:
         result = calculator(output)
-        print(f"ouput: {output} result: {result} target: {target}")
+        # print(f"output: {output} result: {result} target: {target}")
         if result == int(target):
             return 1
         else:
@@ -67,10 +82,9 @@ def calculator_accuracy_reward(output, target):
         return -1
 
 
-def compute_calculator_rewards(outputs, target):
+def compute_calculator_rewards(outputs, targets):
     rewards = []
 
-    targets = [target] * len(outputs)
     for output, target in zip(outputs, targets):
         cur_reward = 0
         cur_reward += calculator_format_reward(output, target)

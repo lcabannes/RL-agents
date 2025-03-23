@@ -18,16 +18,17 @@ def addition_problem_generator(size=1000, digits=3):
         yield {"prompt": prompt, "right_answer": right_answer}
 
 def calculator_problem_generator(size=1000, digits=3):
-    calculator_prompt = """What is the result of the following expression {} {} {}?
+    calculator_prompt = """
     Provide the numerical answer strictly within <answer></answer> tags, answer in less than 10 words.
-    Do not use python just put the expression in the answer tags.
+    Do not use python just put the expression in the answer tag.
     Example:
-    Input: What is the result of 5 plus 3?
-    Output: <answer>5 + 3</answer>
-    Input: What is the result of 283 times 9?
-    Output: <answer>283 * 9</answer>
-    Input: What is the result of 12 minus 68?
-    Output: <answer>12 - 68</answer>
+    Input: 'What is the result of 5 plus 3?'
+    Output: '<answer>calculator(5 + 3)</answer>'
+    Input: What is the result of 283 times 9?'
+    Output: 'The answer is <answer>calculator(283 * 9)</answer>'
+    Input: 'What is the result of 12 minus 68?'
+    Output: 'The answer is <answer>calculator(12 - 68)</answer>'
+    Input: 'What is the result of {} {} {}?'
     """
     for _ in range(size):
         a = np.random.randint(0, 10**digits)

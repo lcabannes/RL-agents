@@ -79,13 +79,15 @@ mu = 2
 learning_rate = 1e-4
 epochs = 10
 batch_size = 2
-log_interval = 100
+log_interval = 1
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 
 # smollm 
-model_id = "HuggingFaceTB/SmolLM-360m-Instruct"
+model_id = "HuggingFaceTB/SmolLM2-360m-Instruct"
+
+# model_id = "Qwen/Qwen2.5-0.5B-Instruct"
 model = AutoModelForCausalLM.from_pretrained(model_id).to(device).to(torch.bfloat16)
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
@@ -153,10 +155,11 @@ for epoch in range(1, epochs+1):
 
         # print(f"text_outputs 0 {text_outputs[0]}")
         # print(f"prompts 0 {prompts[0]}")
-        for i in range(num_samples):
-            print(f"sample {i}: {text_outputs[i]}")
-            if i == 4:
-                break
+        print(f"questions 0: {questions[0]}")
+        for text_output in text_outputs:
+            print(f"text_output: {text_output}")
+            break
+        
         old_model.load_state_dict(model.state_dict()) # update the old model before the update steps like in the paper
 
         # compute old log probabilities for ratio and ref for KL divergence penalty
@@ -165,7 +168,9 @@ for epoch in range(1, epochs+1):
             old_log_probs = compute_log_probs(old_model, outputs, prompt_length).detach()
 
 
-
+        print(f"len text_outputs: {len(text_outputs)}")
+        print(f"len right_answers: {len(right_answers)}")
+        right_answers = [answer for answer in right_answers for _ in range(num_samples)]
         rewards = compute_calculator_rewards(text_outputs, right_answers).to(device)
         print(f"rewards 0: {rewards}")
 
