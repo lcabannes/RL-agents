@@ -77,7 +77,7 @@ for epoch in range(1, epochs+1):
         with torch.no_grad():
             ref_log_probs = compute_log_probs(ref_model, outputs, prompt_length).detach()
             old_log_probs = compute_log_probs(old_model, outputs, prompt_length).detach()
-
+        
         # compute rewards
         rewards = compute_rewards(text_outputs, answers)
 

@@ -71,10 +71,8 @@ def generate(model, prompts, new_tokens, mode="sampling", num_samples=1, tempera
 train_set = get_dataset(size=100)
 test_set = get_dataset(size=100)
 
-print(f"train set 0: {train_set[0]}")
-print(f"test set 0: {test_set[0]}")
 
-temperature = 8.0
+temperature = 1.0
 num_samples = 16
 mu = 2
 learning_rate = 1e-4
@@ -84,14 +82,34 @@ log_interval = 100
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+
 # smollm 
-model_id = "HuggingFaceTB/SmolLM-135m-Instruct"
+model_id = "HuggingFaceTB/SmolLM-360m-Instruct"
 model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 
 pad_token_id = tokenizer.convert_tokens_to_ids(pad_token)  
 eos_token_id = tokenizer.convert_tokens_to_ids(eos_token)  
+
+
+def collate_fn(batch):
+    inputs = [
+        tokenizer.apply_chat_template([{"role": "user", "content": x["prompt"]}], tokenize=False)
+        for x in batch
+        ]
+    targets = [x["right_answer"] for x in batch]
+    inputs = tokenizer(inputs, padding=True, truncation=True, return_tensors="pt")
+    targets = tokenizer(targets, padding=True, truncation=True, return_tensors="pt")
+    return inputs, targets
+
+
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+
+
+print(f"next(iter(train_loader)) {next(iter(train_loader))}")
+
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 best_test_accuracy = None
@@ -108,26 +126,35 @@ old_model = model
 for epoch in range(1, epochs+1):
     ref_model.load_state_dict(model.state_dict()) # update ref model every epoch like in the GRPO paper
     epoch_start_time = time.time()
-    start_time = time.time()
-    for batch, i in enumerate(range(0, len(train_set) - 1, batch_size)):
+    for i, batch in enumerate(train_loader): 
 
+        start_time = time.time()
         # get a batch of prompts and answers
-        prompts, _, prompt_length, answers_length, questions, answers = get_batch("train", i, batch_size)
-        prompts = prompts.to(device) # (prompt_length, batch_size)
+        prompts, answer = batch
+
+        # decode prompts just to check
+        decoded_prompts = [tokenizer.decode(prompt) for prompt in prompts["input_ids"]]
         # generate samples for each prompt
-        outputs = generate(model,
-                            prompts,
-                            new_tokens=answers_length + 1,
-                            mode="sampling",
-                            num_samples=num_samples,
-                            temperature=temperature)
+        outputs = model.generate(
+            prompts["input_ids"].to(device), 
+            max_new_tokens=50,
+            num_return_sequences=num_samples,
+            temperature=temperature,
+            do_sample=True,
+            
+            )
+
         # outputs.shape = (prompt_length + answers_length + 1, batch_size * num_samples)
-        text_outputs = [tokenizer.decode(outputs[prompt_length:, i].tolist())
-                        for i in range(outputs.size(1))]
+        prompt_length = prompts["input_ids"].shape[1]
+        text_outputs = tokenizer.batch_decode(outputs[:, prompt_length:])
+        questions = tokenizer.batch_decode(prompts["input_ids"])
+        right_answers = tokenizer.batch_decode(answer["input_ids"])
+
         # print(f"text_outputs 0 {text_outputs[0]}")
         # print(f"prompts 0 {prompts[0]}")
-        print(f"questions 0 {questions[0]}")
-        print(f"answers {answers}")
+        for i in range(num_samples):
+            print(f"sample {i}: {text_outputs[i]}")
+            break
         old_model.load_state_dict(model.state_dict()) # update the old model before the update steps like in the paper
 
         # compute old log probabilities for ratio and ref for KL divergence penalty
@@ -135,17 +162,16 @@ for epoch in range(1, epochs+1):
             ref_log_probs = compute_log_probs(ref_model, outputs, prompt_length).detach()
             old_log_probs = compute_log_probs(old_model, outputs, prompt_length).detach()
 
-        # compute rewards
 
 
-        rewards = compute_rewards(text_outputs, answers).to(device)
+        rewards = compute_rewards(text_outputs, right_answers).to(device)
         print(f"rewards 0: {rewards}")
 
         # compute advantages
         advantages = calculate_grpo_advantages(rewards, num_samples=num_samples)
 
         # compute loss
-        responses = outputs[prompt_length:, :]
+        responses = outputs[:, prompt_length:]
 
         for inner_iter in range(mu): # do mu iteration on the generated trajectories like in the paper
 
@@ -158,9 +184,9 @@ for epoch in range(1, epochs+1):
             optimizer.zero_grad()
     
 
-        if i % log_interval == 0 and batch > 0:
+        if i % log_interval == 0:
             elapsed = time.time() - start_time
-            print('| {:5d}/{:5d} batches | ms/batch {:5.2f}'.format(batch, len(train_set) // batch_size, elapsed))
+            print(f"elapsed: {elapsed} mean rewards: {rewards.mean()}")
 
     test_accuracy = evaluate()
     print('-' * 89)

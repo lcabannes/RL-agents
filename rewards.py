@@ -10,6 +10,9 @@ def format_reward(output, target):
     extracted = re.findall(pattern, output)
     if len(extracted) == 0:
         return -1
+    else:
+        return 1
+
 
 def basic_reward(output, target):
     extracted = re.findall(pattern, output)
@@ -54,7 +57,7 @@ def compute_log_probs(model, outputs, prompt_length):
 
     # we only need the log probabilities for the new tokens
     # this introduces a shift: the logits for a position are the predictions for the next token
-    logits = logits[prompt_length-1:-1, :, :]
+    logits = logits[:, prompt_length-1:-1, :]
     # logits.shape = (answers_length + 1, batch_size * num_samples, vocab_size)
 
     # convert raw logits into log probabilities along the vocabulary axis
@@ -83,8 +86,9 @@ def compute_ppo_loss(advantages, log_probs, old_log_probs, ref_log_probs, respon
     ref_selected_log_probs = ref_log_probs.gather(dim=-1, index=responses).squeeze(-1)
 
     ratios = torch.exp(selected_log_probs - old_selected_log_probs)
-    advantages = advantages.unsqueeze(dim=0)
+    advantages = advantages.unsqueeze(dim=-1)
 
+    print
     surr1 = ratios * advantages
     surr2 = torch.clamp(ratios, 1-eps, 1+eps) * advantages
 
