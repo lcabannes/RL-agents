@@ -49,7 +49,7 @@ def get_dataset(size=1000, digits=3, calculator=False):
     
     generator = lambda: addition_problem_generator(size, digits)
     if calculator:
-        generator = lambda: calculator_problem_generator(size)
+        generator = lambda: calculator_problem_generator(size, digits)
 
     dataset = datasets.Dataset.from_generator(generator)
 

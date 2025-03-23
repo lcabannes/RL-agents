@@ -70,11 +70,12 @@ def generate(model, prompts, new_tokens, mode="sampling", num_samples=1, tempera
     return input_tensor
 
 
-train_set = get_dataset(size=100, calculator=True)
-test_set = get_dataset(size=100, calculator=True) 
+num_digits = 8
+train_set = get_dataset(size=100, digits=num_digits, calculator=True)
+test_set = get_dataset(size=100, digits=num_digits, calculator=True) 
 
 
-temperature = 1.2
+temperature = 0.8
 num_samples = 16 if torch.cuda.is_available() else 4
 mu = 2
 learning_rate = 1e-4
@@ -116,10 +117,10 @@ test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuff
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 best_test_accuracy = None
-test_accuracy = evaluate()
-print('-' * 89)
-print('| initialisation | test accuracy {:5.2f}'.format(test_accuracy))
-print('-' * 89)
+# test_accuracy = evaluate()
+# print('-' * 89)
+# print('| initialisation | test accuracy {:5.2f}'.format(test_accuracy))
+# print('-' * 89)
 
 # switch eval for train model (enables dropout)
 model.train()
@@ -133,6 +134,7 @@ for epoch in range(1, epochs+1):
     ref_model.load_state_dict(model.state_dict()) # update ref model every epoch like in the GRPO paper
     epoch_start_time = time.time()
     for i, batch in enumerate(train_loader): 
+        old_model.load_state_dict(model.state_dict()) # update the old model before the update steps like in the paper
 
         start_time = time.time()
         # get a batch of prompts and answers
@@ -163,7 +165,6 @@ for epoch in range(1, epochs+1):
             print(f"text_output: {text_output}")
             break
         
-        old_model.load_state_dict(model.state_dict()) # update the old model before the update steps like in the paper
 
         # compute old log probabilities for ratio and ref for KL divergence penalty
         with torch.no_grad():
@@ -200,8 +201,8 @@ for epoch in range(1, epochs+1):
             print(f"elapsed: {elapsed} mean rewards: {rewards.mean().item()}")
             # plot rewards
             plt.plot(reward_hist)
-            plt.title("mean reward")
-            plt.savefig(f"figures/rewards_epoch_{epoch}.png")
+            plt.title(f"mean reward for {num_digits} digits")
+            plt.savefig(f"figures/{num_digits}digits_rewards_epoch_{epoch}.png")
 
 
     test_accuracy = evaluate()
