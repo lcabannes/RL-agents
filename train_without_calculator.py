@@ -73,7 +73,7 @@ test_set = get_dataset(size=100)
 
 
 temperature = 1.0
-num_samples = 16
+num_samples = 16 if torch.cuda.is_available() else 2
 mu = 2
 learning_rate = 1e-4
 epochs = 10
