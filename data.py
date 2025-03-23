@@ -40,15 +40,15 @@ def calculator_problem_generator(size=1000, digits=3):
         operator_name = operator_names[choice]
 
         prompt = calculator_prompt.format(a, operator_name, b)
-        right_answer = str(eval(f"{a} {operator} {b}"))
+        right_answer = eval(f"{a} {operator} {b}")
         yield {"prompt": prompt, "right_answer": right_answer}
 
 
-def get_dataset(size=1000, digits=3, calculator=False):
+def get_dataset(size=1000, digits=3, use_calculator=False):
 
     
     generator = lambda: addition_problem_generator(size, digits)
-    if calculator:
+    if use_calculator:
         generator = lambda: calculator_problem_generator(size, digits)
 
     dataset = datasets.Dataset.from_generator(generator)

@@ -24,8 +24,11 @@ def accuracy_reward(output, target):
         return 0
 
     extracted = extracted[0]
+    if not extracted.replace(".", "").isdigit():
+        return 0
+    extracted = eval(extracted)
 
-    if extracted == target:
+    if (extracted - target) < 1e-5:
         return 1
     else:
         return 0
@@ -43,7 +46,7 @@ def compute_rewards(outputs, target):
         cur_reward = 0
         cur_reward += format_reward(output, target)
         cur_reward += accuracy_reward(output, target)
-        cur_reward += length_reward(output, target)
+        # cur_reward += length_reward(output, target)
         rewards.append(cur_reward)
     
     return torch.tensor(rewards).to(torch.float32)
@@ -57,11 +60,7 @@ def calculator_format_reward(output, target):
         return 1
     else:
         return 0
-    try:
-        calculator(output)
-        return 1
-    except:
-        return -1
+
 
 def calculator_accuracy_reward(output, target):
     extracted = re.findall(calculator_pattern, output)
@@ -74,7 +73,7 @@ def calculator_accuracy_reward(output, target):
     try:
         result = calculator(output)
         # print(f"output: {output} result: {result} target: {target}")
-        if result == int(target):
+        if (result - target) < 1e-5:
             return 1
         else:
             return -1

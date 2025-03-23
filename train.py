@@ -6,73 +6,75 @@ from rewards import compute_log_probs, compute_calculator_rewards, compute_ppo_l
 from data import get_dataset
 from peft import PeftModelForCausalLM
 import matplotlib.pyplot as plt
+import re
+from tools.calculator import calculator
+import torch.nn.functional as F
+from tqdm import tqdm
 
-def evaluate():
+
+def evaluate(use_calculator=False):
     model.eval()
-    correct = 0.
-    with torch.no_grad():
-        for batch, i in enumerate(range(0, len(test_set) - 1, batch_size)):
-            prompts, target_answers, prompt_length, answers_length, _, _ = get_batch("test", i, batch_size)
-            prompts = prompts.to(device) 
-            target_answers = target_answers.to(device) 
-            output = generate(model, prompts, answers_length + 1)
-            answers_tokens = output[prompt_length:, :]
-            equality_test = answers_tokens == target_answers
-            correct += torch.all(equality_test, axis=0).float().sum()
-        accuracy = correct / len(test_set)
-    return accuracy.item()
-
-pad_token="[PAD]"
-eos_token="[EOS]"
-def pad(token_list, type_list="prompts"):
-    max_length = max(len(x) for x in token_list)
-    out = []
+    correct = 0.0
+    total = 0
     
-    for x in token_list:
-        padding = [pad_token_id] * (max_length - len(x)) 
-        if type_list == "prompts":
-            padded = padding + x  
-        elif type_list == "answers":
-            padded = x + [eos_token_id] + padding 
-        out.append(padded)
-    return out, max_length
+    # Define patterns to extract answers
+    if not use_calculator:
+        pattern = "<answer>(.*?)</answer>"
+    else:
+       pattern = "<answer>calculator\\((.*?)\\)</answer>"
+    
+    # Set error tolerance
+    tolerance = 1e-6  # Adjust as needed
+    
+    with torch.no_grad():
+        for batch in tqdm(test_loader):
+            prompts, right_answers = batch
+            
+            # Generate outputs
+            outputs = model.generate(
+                prompts["input_ids"].to(device),
+                max_new_tokens=50,
+                do_sample=False  # Use greedy decoding for evaluation
+            )
+            
+            # Calculate prompt length to extract only the generated part
+            prompt_length = prompts["input_ids"].shape[1]
+            
+            # Extract text outputs
+            text_outputs = tokenizer.batch_decode(outputs[:, prompt_length:])
+            right_answers = [answer for answer in right_answers for _ in range(num_samples)]
 
-def get_batch(split, i, batch_size):
-    data = train_set if split == 'train' else test_set
-    end_index = min(i + batch_size, len(data))
-    batches = data.select(range(i, end_index))
-    prompts = batches["prompt"]
-    encoded_prompts = [tokenizer.encode(prompt, add_special_tokens=False) for prompt in prompts]
-    padded_prompts, prompt_length = pad(encoded_prompts, "prompts")
-    answers = batches["right_answer"]
-    encoded_answers = [tokenizer.encode(answer, add_special_tokens=False) for answer in answers]
-    padded_answers, answers_length = pad(encoded_answers, "answers")
-    X = torch.tensor(padded_prompts).T
-    Y = torch.tensor(padded_answers).T
-
-    return X, Y, prompt_length, answers_length, prompts, answers
-
-def generate(model, prompts, new_tokens, mode="sampling", num_samples=1, temperature=1.0):
-    input_tensor = torch.repeat_interleave(prompts, repeats = num_samples, dim = 1).to(device)
-    # (prompt_length, batch_size * num_samples)
-    for _ in range(new_tokens):
-        output = model(input_tensor) # (prompt_length, batch_size * num_samples, ntokens)
-        logits = output.logits
-        logits = logits[-1, :, :]
-        # logits = output[-1,:,:] # (batch_size * num_samples, ntokens)
-        if mode == "greedy":
-            tokens = torch.argmax(logits, -1).view((1,-1)) # (1, batch_size * num_samples)
-        else: # mode == "sampling"
-            logits /= temperature
-            probs = torch.softmax(logits, dim=-1)
-            tokens = torch.multinomial(probs, num_samples = 1).view((1,-1)) # (1, batch_size * num_samples)
-        input_tensor = torch.cat((input_tensor, tokens), 0)
-    return input_tensor
+            
+            # Check each output
+            for output, target in zip(text_outputs, right_answers):
+                # Try regular pattern first
+                extracted = re.findall(pattern, output)
+                
+                # If not found, try use_calculator pattern
+                try:
+                    # Use the use_calculator function to evaluate the expression
+                    if use_calculator:
+                        result = float(calculator(extracted[0]))
+                    else:
+                        result = float(eval(extracted[0]))
+                    if abs(result - target) <= tolerance:
+                        correct += 1
+                    else:
+                        print(f"wrong results output: {output} target: {target} result: {result}")
+                except:
+                    print(f"exception output: {output} target: {target}")
+                    pass
+                       
+                total += 1
+    
+    accuracy = correct / total if total > 0 else 0
+    return accuracy
 
 
 num_digits = 8
-train_set = get_dataset(size=100, digits=num_digits, calculator=True)
-test_set = get_dataset(size=100, digits=num_digits, calculator=True) 
+use_calculator = True
+train_set = get_dataset(size=100, digits=num_digits, use_calculator=use_calculator)
+test_set = get_dataset(size=100, digits=num_digits, use_calculator=use_calculator) 
 
 
 temperature = 0.8
@@ -94,9 +96,6 @@ model = AutoModelForCausalLM.from_pretrained(model_id).to(device).to(torch.bfloa
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 
-pad_token_id = tokenizer.convert_tokens_to_ids(pad_token)  
-eos_token_id = tokenizer.convert_tokens_to_ids(eos_token)  
-
 
 def collate_fn(batch):
     inputs = [
@@ -110,17 +109,17 @@ def collate_fn(batch):
 
 
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, collate_fn=collate_fn)
 
 
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 best_test_accuracy = None
-# test_accuracy = evaluate()
-# print('-' * 89)
-# print('| initialisation | test accuracy {:5.2f}'.format(test_accuracy))
-# print('-' * 89)
+test_accuracy = evaluate(use_calculator=use_calculator)
+print('-' * 89)
+print('| initialisation | test accuracy {:5.2f}'.format(test_accuracy))
+print('-' * 89)
 
 # switch eval for train model (enables dropout)
 model.train()
@@ -160,10 +159,9 @@ for epoch in range(1, epochs+1):
 
         # print(f"text_outputs 0 {text_outputs[0]}")
         # print(f"prompts 0 {prompts[0]}")
-        print(f"questions 0: {questions[0]}")
         for text_output in text_outputs:
-            print(f"text_output: {text_output}")
             break
+            print(f"text_output: {text_output}")
         
 
         # compute old log probabilities for ratio and ref for KL divergence penalty
@@ -172,8 +170,6 @@ for epoch in range(1, epochs+1):
             old_log_probs = compute_log_probs(old_model, outputs, prompt_length).detach()
 
 
-        print(f"len text_outputs: {len(text_outputs)}")
-        print(f"len right_answers: {len(right_answers)}")
         right_answers = [answer for answer in right_answers for _ in range(num_samples)]
         rewards = compute_calculator_rewards(text_outputs, right_answers).to(device)
         reward_hist.append(rewards.mean().item())
@@ -205,7 +201,7 @@ for epoch in range(1, epochs+1):
             plt.savefig(f"figures/{num_digits}digits_rewards_epoch_{epoch}.png")
 
 
-    test_accuracy = evaluate()
+    test_accuracy = evaluate(use_calculator=use_calculator)
     print('-' * 89)
     print('| end of epoch {:3d} | time: {:5.2f}s | test accuracy {:5.2f}'.format(epoch, (time.time() - epoch_start_time), test_accuracy))
     print('-' * 89)
