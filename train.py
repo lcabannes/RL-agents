@@ -5,6 +5,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from rewards import compute_log_probs, compute_calculator_rewards, compute_ppo_loss, calculate_grpo_advantages
 from data import get_dataset
 from peft import PeftModelForCausalLM
+import matplotlib.pyplot as plt
 
 def evaluate():
     model.eval()
@@ -126,6 +127,8 @@ ref_model = deepcopy(model) # reference model for KL divergence penalty
 old_model = deepcopy(model) # old model for PPO ratio
 
 
+reward_hist = [] 
+
 for epoch in range(1, epochs+1):
     ref_model.load_state_dict(model.state_dict()) # update ref model every epoch like in the GRPO paper
     epoch_start_time = time.time()
@@ -172,6 +175,7 @@ for epoch in range(1, epochs+1):
         print(f"len right_answers: {len(right_answers)}")
         right_answers = [answer for answer in right_answers for _ in range(num_samples)]
         rewards = compute_calculator_rewards(text_outputs, right_answers).to(device)
+        reward_hist.append(rewards.mean().item())
         print(f"rewards 0: {rewards}")
 
         # compute advantages
@@ -193,7 +197,12 @@ for epoch in range(1, epochs+1):
 
         if i % log_interval == 0:
             elapsed = time.time() - start_time
-            print(f"elapsed: {elapsed} mean rewards: {rewards.mean()}")
+            print(f"elapsed: {elapsed} mean rewards: {rewards.mean().item()}")
+            # plot rewards
+            plt.plot(reward_hist)
+            plt.title("mean reward")
+            plt.savefig(f"figures/rewards_epoch_{epoch}.png")
+
 
     test_accuracy = evaluate()
     print('-' * 89)
