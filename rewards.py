@@ -1,5 +1,7 @@
 import torch
 import re
+from torch.nn import functional as F
+
 pattern = "<answer>(.*?)</answer>"
 eps = 0.2
 beta = 0.01
@@ -18,13 +20,18 @@ def basic_reward(output, target):
 
     return extracted == target
 
-def compute_rewards(output, target):
-    cur_reward = 0
-    cur_reward += format_reward(output, target)
-    cur_reward += basic_reward(output, target)
-    cur_reward += eval_reward(output, target)
+def compute_rewards(outputs, target):
+    rewards = []
+
+    targets = [target] * len(outputs)
+    for output, target in zip(outputs, targets):
+        cur_reward = 0
+        cur_reward += format_reward(output, target)
+        cur_reward += basic_reward(output, target)
+        cur_reward += eval_reward(output, target)
+        rewards.append(cur_reward)
     
-    return cur_reward
+    return torch.tensor(rewards).to(torch.float32)
    
 def eval_reward(output, target):
     extracted = re.findall(pattern, output)
@@ -41,7 +48,8 @@ def eval_reward(output, target):
 
 
 def compute_log_probs(model, outputs, prompt_length):
-    logits, _ = model(outputs)
+    logits = model(outputs).logits
+
     # logits.shape = (prompt_length + answers_length + 1, batch_size * num_samples, vocab_size)
 
     # we only need the log probabilities for the new tokens
