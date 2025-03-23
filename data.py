@@ -5,7 +5,10 @@ def addition_problem_generator(size=1000, digits=3):
     add_prompt = """What is the sum of {} and {}? Provide the numerical answer strictly within <answer></answer> tags, answer in less than 10 words.
                     Example:
                     Input: What is the sum of 5 and 3?
-                    Output: <answer>8</answer>"""
+                    Output: <answer>8</answer>
+                    Input: What is the sum of 61 and 7?
+                    Output: <answer>68</answer>
+                    """
     for _ in range(size):
 
         a = np.random.randint(0, 10**digits)

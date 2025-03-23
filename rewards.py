@@ -10,8 +10,10 @@ def format_reward(output, target):
     extracted = re.findall(pattern, output)
     if len(extracted) == 0:
         return -1
-    else:
+    elif len(extracted[0]) > 0:
         return 1
+    else:
+        return -1
 
 
 def basic_reward(output, target):
@@ -23,6 +25,11 @@ def basic_reward(output, target):
 
     return extracted == target
 
+def length_reward(output, target):
+    end_token = "<|im_end|>" 
+    output = output.split(end_token)[0]
+    return - len(output) * 0.001
+
 def compute_rewards(outputs, target):
     rewards = []
 
@@ -32,6 +39,7 @@ def compute_rewards(outputs, target):
         cur_reward += format_reward(output, target)
         cur_reward += basic_reward(output, target)
         cur_reward += eval_reward(output, target)
+        cur_reward += length_reward(output, target)
         rewards.append(cur_reward)
     
     return torch.tensor(rewards).to(torch.float32)

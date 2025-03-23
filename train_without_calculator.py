@@ -4,6 +4,7 @@ from copy import deepcopy
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from rewards import compute_log_probs, compute_rewards, compute_ppo_loss, calculate_grpo_advantages
 from data import get_dataset
+from peft import PeftModelForCausalLM
 
 def evaluate():
     model.eval()
@@ -73,7 +74,7 @@ test_set = get_dataset(size=100)
 
 
 temperature = 1.0
-num_samples = 16 if torch.cuda.is_available() else 2
+num_samples = 16 if torch.cuda.is_available() else 4
 mu = 2
 learning_rate = 1e-4
 epochs = 10
@@ -85,7 +86,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # smollm 
 model_id = "HuggingFaceTB/SmolLM-360m-Instruct"
-model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
+model = AutoModelForCausalLM.from_pretrained(model_id).to(device).to(torch.bfloat16)
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 
@@ -108,8 +109,6 @@ train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shu
 test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 
 
-print(f"next(iter(train_loader)) {next(iter(train_loader))}")
-
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 best_test_accuracy = None
@@ -121,7 +120,8 @@ print('-' * 89)
 # switch eval for train model (enables dropout)
 model.train()
 ref_model = deepcopy(model) # reference model for KL divergence penalty
-old_model = model
+old_model = deepcopy(model) # old model for PPO ratio
+
 
 for epoch in range(1, epochs+1):
     ref_model.load_state_dict(model.state_dict()) # update ref model every epoch like in the GRPO paper
@@ -135,14 +135,15 @@ for epoch in range(1, epochs+1):
         # decode prompts just to check
         decoded_prompts = [tokenizer.decode(prompt) for prompt in prompts["input_ids"]]
         # generate samples for each prompt
-        outputs = model.generate(
-            prompts["input_ids"].to(device), 
-            max_new_tokens=50,
-            num_return_sequences=num_samples,
-            temperature=temperature,
-            do_sample=True,
-            
-            )
+        with torch.no_grad():  
+            outputs = model.generate(
+                prompts["input_ids"].to(device), 
+                max_new_tokens=50,
+                num_return_sequences=num_samples,
+                temperature=temperature,
+                do_sample=True,
+                
+                )
 
         # outputs.shape = (prompt_length + answers_length + 1, batch_size * num_samples)
         prompt_length = prompts["input_ids"].shape[1]
