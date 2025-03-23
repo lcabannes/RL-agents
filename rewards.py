@@ -1,6 +1,7 @@
 import torch
 import re
 from torch.nn import functional as F
+from tools.calculator import calculator
 
 pattern = "<answer>(.*?)</answer>"
 eps = 0.2
@@ -16,19 +17,22 @@ def format_reward(output, target):
         return -1
 
 
-def basic_reward(output, target):
+def accuracy_reward(output, target):
     extracted = re.findall(pattern, output)
     if len(extracted) == 0:
-        return -1
+        return 0
 
     extracted = extracted[0]
 
-    return extracted == target
+    if extracted == target:
+        return 1
+    else:
+        return 0
 
 def length_reward(output, target):
     end_token = "<|im_end|>" 
     output = output.split(end_token)[0]
-    return - len(output) * 0.001
+    return - (max(0, len(output)-40)) * 0.001
 
 def compute_rewards(outputs, target):
     rewards = []
@@ -37,25 +41,45 @@ def compute_rewards(outputs, target):
     for output, target in zip(outputs, targets):
         cur_reward = 0
         cur_reward += format_reward(output, target)
-        cur_reward += basic_reward(output, target)
-        cur_reward += eval_reward(output, target)
+        cur_reward += accuracy_reward(output, target)
         cur_reward += length_reward(output, target)
         rewards.append(cur_reward)
     
     return torch.tensor(rewards).to(torch.float32)
-   
-def eval_reward(output, target):
-    extracted = re.findall(pattern, output)
-    if len(extracted) == 0:
-        return 0
 
-    extracted = extracted[0]
-    target = target
+def calculator_format_reward(output, target):
 
-    if extracted == target:
+    try:
+        calculator(output)
         return 1
-    else:
-        return 0
+    except:
+        return -1
+
+def calculator_accuracy_reward(output, target):
+    try:
+        result = calculator(output)
+        print(f"ouput: {output} result: {result} target: {target}")
+        if result == int(target):
+            return 1
+        else:
+            return -1
+    except:
+        return -1
+
+
+def compute_calculator_rewards(outputs, target):
+    rewards = []
+
+    targets = [target] * len(outputs)
+    for output, target in zip(outputs, targets):
+        cur_reward = 0
+        cur_reward += calculator_format_reward(output, target)
+        cur_reward += calculator_accuracy_reward(output, target)
+        # cur_reward += length_reward(output, target)
+        rewards.append(cur_reward)
+    
+    return torch.tensor(rewards).to(torch.float32)
+   
 
 
 def compute_log_probs(model, outputs, prompt_length):

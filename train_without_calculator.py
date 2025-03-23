@@ -101,7 +101,7 @@ def collate_fn(batch):
         ]
     targets = [x["right_answer"] for x in batch]
     inputs = tokenizer(inputs, padding=True, truncation=True, return_tensors="pt")
-    targets = tokenizer(targets, padding=True, truncation=True, return_tensors="pt")
+    # targets = tokenizer(targets, padding=True, truncation=True, return_tensors="pt")
     return inputs, targets
 
 
@@ -130,7 +130,7 @@ for epoch in range(1, epochs+1):
 
         start_time = time.time()
         # get a batch of prompts and answers
-        prompts, answer = batch
+        prompts, right_answers = batch
 
         # decode prompts just to check
         decoded_prompts = [tokenizer.decode(prompt) for prompt in prompts["input_ids"]]
@@ -149,7 +149,6 @@ for epoch in range(1, epochs+1):
         prompt_length = prompts["input_ids"].shape[1]
         text_outputs = tokenizer.batch_decode(outputs[:, prompt_length:])
         questions = tokenizer.batch_decode(prompts["input_ids"])
-        right_answers = tokenizer.batch_decode(answer["input_ids"])
 
         # print(f"text_outputs 0 {text_outputs[0]}")
         # print(f"prompts 0 {prompts[0]}")
