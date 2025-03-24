@@ -28,7 +28,7 @@ def accuracy_reward(output, target):
         return 0
     extracted = eval(extracted)
 
-    if (extracted - target) < 1e-5:
+    if abs(extracted - target) < 1e-5:
         return 1
     else:
         return 0
@@ -72,13 +72,13 @@ def calculator_accuracy_reward(output, target):
     output = extracted[0]
     try:
         result = calculator(output)
-        # print(f"output: {output} result: {result} target: {target}")
-        if (result - target) < 1e-5:
+        print(f"output: {output} result: {result} target: {target}")
+        if abs(result - target) < 1e-5:
             return 1
         else:
-            return -1
+            return 0
     except:
-        return -1
+        return 0
 
 
 def compute_calculator_rewards(outputs, targets):

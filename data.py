@@ -20,14 +20,9 @@ def addition_problem_generator(size=1000, digits=3):
 def calculator_problem_generator(size=1000, digits=3):
     calculator_prompt = """
     Provide the numerical answer strictly within <answer></answer> tags, answer in less than 10 words.
-    Do not use python just put the expression in the answer tag.
     Example:
     Input: 'What is the result of 5 plus 3?'
     Output: '<answer>calculator(5 + 3)</answer>'
-    Input: What is the result of 283 times 9?'
-    Output: 'The answer is <answer>calculator(283 * 9)</answer>'
-    Input: 'What is the result of 12 minus 68?'
-    Output: 'The answer is <answer>calculator(12 - 68)</answer>'
     Input: 'What is the result of {} {} {}?'
     """
     for _ in range(size):
