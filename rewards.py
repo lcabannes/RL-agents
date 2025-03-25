@@ -44,7 +44,7 @@ def compute_rewards(outputs, target):
     targets = [target] * len(outputs)
     for output, target in zip(outputs, targets):
         cur_reward = 0
-        cur_reward += format_reward(output, target)
+        # cur_reward += format_reward(output, target)
         cur_reward += accuracy_reward(output, target)
         # cur_reward += length_reward(output, target)
         rewards.append(cur_reward)
@@ -55,11 +55,11 @@ def calculator_format_reward(output, target):
 
     extracted = re.findall(calculator_pattern, output)
     if len(extracted) == 0:
-        return -1
-    elif len(extracted[0]) > 0:
-        return 1
-    else:
         return 0
+    elif len(extracted[0]) > 0:
+        return 2
+    else:
+        return 1
 
 
 def calculator_accuracy_reward(output, target):
@@ -86,8 +86,8 @@ def compute_calculator_rewards(outputs, targets):
 
     for output, target in zip(outputs, targets):
         cur_reward = 0
-        cur_reward += calculator_format_reward(output, target)
-        cur_reward += calculator_accuracy_reward(output, target)
+        cur_reward += 0.01 *  calculator_format_reward(output, target)
+        cur_reward += 10 * calculator_accuracy_reward(output, target)
         # cur_reward += length_reward(output, target)
         rewards.append(cur_reward)
     

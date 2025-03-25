@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 
-def evaluate(use_calculator=False):
+def evaluate(model, use_calculator=False):
     model.eval()
     correct = 0.0
     total = 0
@@ -76,12 +76,13 @@ def evaluate(use_calculator=False):
 
 
 temperature = 0.8
-num_samples = 12 if torch.cuda.is_available() else 4
+num_samples = 24 if torch.cuda.is_available() else 4
 mu = 2
 learning_rate = 1e-4
 epochs = 10
 batch_size = 2
-log_interval = 1
+log_interval = 5
+test_interval = 100
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -135,8 +136,8 @@ def collate_fn(batch):
     return inputs, targets
 
 
-train_set = datasets.load_dataset("gsm8k", 'main', split="train[:100%]")
-test_set = datasets.load_dataset("gsm8k", 'main', split="test[:100%]")
+train_set = datasets.load_dataset("gsm8k", 'main', split="train[:2000]")
+test_set = datasets.load_dataset("gsm8k", 'main', split="test[:200]")
 
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, collate_fn=collate_fn)
@@ -147,23 +148,32 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 best_test_accuracy = None
 use_calculator = True
-test_accuracy = evaluate(use_calculator=use_calculator)
+test_accuracy = evaluate(model, use_calculator=use_calculator)
 print('-' * 89)
 print('| initialisation | test accuracy {:5.2f}'.format(test_accuracy))
 print('-' * 89)
 
 # switch eval for train model (enables dropout)
 model.train()
+# enable gradient checkpointing
+
 ref_model = deepcopy(model) # reference model for KL divergence penalty
 old_model = deepcopy(model) # old model for PPO ratio
 
+model.enable_input_require_grads()
+model.gradient_checkpointing_enable()
 
 reward_hist = [] 
 accuracies = []
+running_means = []
+
+
+accuracies.append(test_accuracy)
 
 for epoch in range(1, epochs+1):
     ref_model.load_state_dict(model.state_dict()) # update ref model every epoch like in the GRPO paper
     epoch_start_time = time.time()
+    model.train()
     for i, batch in enumerate(tqdm(train_loader)): 
         old_model.load_state_dict(model.state_dict()) # update the old model before the update steps like in the paper
 
@@ -189,31 +199,37 @@ for epoch in range(1, epochs+1):
         text_outputs = tokenizer.batch_decode(outputs[:, prompt_length:])
         questions = tokenizer.batch_decode(prompts["input_ids"])
 
-        # print(f"text_outputs 0 {text_outputs[0]}")
-        for prompt in questions:
-            print(f"prompt: {prompt}")
-            break
-        for text_output in text_outputs:
-            print(f"text_output: {text_output}")
-            break
         
-
-        # compute old log probabilities for ratio and ref for KL divergence penalty
-        with torch.no_grad():
-            ref_log_probs = compute_log_probs(ref_model, outputs, prompt_length).detach()
-            old_log_probs = compute_log_probs(old_model, outputs, prompt_length).detach()
-
-
         right_answers = [answer for answer in right_answers for _ in range(num_samples)]
         rewards = compute_calculator_rewards(text_outputs, right_answers).to(device)
+
+        best_completion = text_outputs[rewards.argmax().item()]
+        best_question = questions[rewards.argmax().item()//num_samples]
+        best_right_answer = right_answers[rewards.argmax().item()]
+        print(f"best question: {best_question}")
+        print(f"best completion: {best_completion}")
+        print(f"best right answer: {best_right_answer}")
+
         reward_hist.append(rewards.mean().item())
+        window_size = min(20, len(reward_hist))
+        running_mean = sum(reward_hist[-window_size:]) / window_size
+        running_means.append(running_mean)
         print(f"rewards 0: {rewards}")
+        
+        if rewards.std() == 0:
+            continue
+
 
         # compute advantages
         advantages = calculate_grpo_advantages(rewards, num_samples=num_samples)
 
         # compute loss
         responses = outputs[:, prompt_length:]
+
+        # compute old log probabilities for ratio and ref for KL divergence penalty
+        with torch.no_grad():
+            ref_log_probs = compute_log_probs(ref_model, outputs, prompt_length).detach()
+            old_log_probs = compute_log_probs(old_model, outputs, prompt_length).detach()
 
         for inner_iter in range(mu): # do mu iteration on the generated trajectories like in the paper
 
@@ -230,24 +246,44 @@ for epoch in range(1, epochs+1):
             elapsed = time.time() - start_time
             print(f"elapsed: {elapsed} mean rewards: {rewards.mean().item()}")
             # plot rewards
-            plt.plot(reward_hist)
-            plt.title(f"mean reward for gsm8k digits")
-            plt.savefig(f"figures/gsm8k_rewards_epoch_{epoch}.png")
+            # plot this one in semi transparent
+            plt.plot(reward_hist, label="rewards", alpha=0.5)
+            plt.title(f"mean reward for gsm8k")
 
+            plt.plot(running_means, label="running mean rewards")
+            plt.legend()
 
-    test_accuracy = evaluate(use_calculator=use_calculator)
-    accuracies.append(test_accuracy)
-    plt.plot(accuracies)
-    plt.title(f"test accuracy for gsm8k digits")
-    plt.savefig(f"figures/gsm8k_accuracy_epoch_{epoch}.png")
-    print('-' * 89)
-    print('| end of epoch {:3d} | time: {:5.2f}s | test accuracy {:5.2f}'.format(epoch, (time.time() - epoch_start_time), test_accuracy))
-    print('-' * 89)
-    # Save the model if the test accuracy is the best we've seen so far.
-    if not best_test_accuracy or test_accuracy < best_test_accuracy:
-        with open("arithmetic_vanilla_GRPO.pt", 'wb') as f:
-            torch.save(model, f)
-        best_test_accuracy = test_accuracy
-    if test_accuracy > 0.99:
+            plt.savefig(f"figures/gsm8k_running_mean_rewards_epoch_{epoch}.png")
+            plt.close()
+
+        if i % test_interval == 0:
+
+            model.eval()
+            model.disable_input_require_grads()
+            model.gradient_checkpointing_disable()  # Disable gradient checkpointing
+            test_accuracy = evaluate(model, use_calculator=use_calculator)
+            print(f"test accuracy: {test_accuracy}")
+            accuracies.append(test_accuracy)
+            plt.close()
+            plt.plot(accuracies)
+            plt.title(f"test accuracy for gsm8k digits")
+            plt.savefig(f"figures/gsm8k_accuracy_epoch_{epoch}.png")
+ 
+            # Save the model if the test accuracy is the best we've seen so far.
+            if not best_test_accuracy or test_accuracy > best_test_accuracy:
+                print(f"saving model with test accuracy: {test_accuracy}")
+                with open("arithmetic_vanilla_GRPO.pt", 'wb') as f:
+                    torch.save(model.state_dict(), f)
+                best_test_accuracy = test_accuracy
+            
+            model.enable_input_require_grads()
+            model.gradient_checkpointing_enable()
+            model.train()
+
+    if best_test_accuracy is not None and best_test_accuracy > 0.99:
         print(f"achieved near perfect accuracy after {epoch} epochs")
         break
+    print('-' * 89)
+    print('| end of epoch {:3d} | time: {:5.2f}s | test accuracy {:5.2f}'.format(epoch, (time.time() - epoch_start_time), accuracies[-1]))
+    print(f"all accuracies: {accuracies}")
+    print('-' * 89)
