@@ -1,0 +1,48 @@
+question: <|im_start|>system
+Answer the question using a calculator in the following way:
+    Input 'Betty is saving money for a new wallet which costs $100. Betty has only half of the money she needs. Her parents decided to give her $15 for that purpose, and her grandparents twice as much as her parents. How much more money does Betty need to buy the wallet?'
+    Output: 'In the beginning, Betty has only 100 / 2 .
+    Betty's parents gave her 15 .
+    Betty's grandparents gave her 15 * 2 .
+    This means, Betty has (100 / 2) + (15 * 2) + 15.
+    So, Betty needs 100 - ((100 / 2) + (15 * 2) + 15) to buy the wallet.'
+    <answer>calculator( 100 - ((100 / 2) + (15 * 2) + 15) )</answer>'  
+    <|im_end|>
+<|im_start|>user
+
+    Provide the numerical answer strictly within <answer></answer> tags, answer in less than 10 words.
+    Example:
+    Input: 'What is the result of 5 plus 3?'
+    Output: '<answer>calculator(5 + 3)</answer>'
+    Input: 'What is the result of 714 plus 52?'
+    <|im_end|>
+
+answer: <|im_start|>assistant
+Output: '<answer>calculator(714 + 52)</answer>'<|im_end|>
+right answer: 133985.0
+correct: 200.0
+
+question: <|im_start|>system
+Answer the question using a calculator in the following way:
+    Input 'Betty is saving money for a new wallet which costs $100. Betty has only half of the money she needs. Her parents decided to give her $15 for that purpose, and her grandparents twice as much as her parents. How much more money does Betty need to buy the wallet?'
+    Output: 'In the beginning, Betty has only 100 / 2 .
+    Betty's parents gave her 15 .
+    Betty's grandparents gave her 15 * 2 .
+    This means, Betty has (100 / 2) + (15 * 2) + 15.
+    So, Betty needs 100 - ((100 / 2) + (15 * 2) + 15) to buy the wallet.'
+    <answer>calculator( 100 - ((100 / 2) + (15 * 2) + 15) )</answer>'  
+    <|im_end|>
+<|im_start|>user
+
+    Provide the numerical answer strictly within <answer></answer> tags, answer in less than 10 words.
+    Example:
+    Input: 'What is the result of 5 plus 3?'
+    Output: '<answer>calculator(5 + 3)</answer>'
+    Input: 'What is the result of 429 plus 230?'
+    <|im_end|>
+
+answer: <|im_start|>assistant
+Output: '<answer>calculator(429 + 230)</answer>'<|im_end|>
+right answer: 133985.0
+correct: 200.0
+

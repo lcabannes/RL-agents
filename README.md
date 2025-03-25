@@ -8,5 +8,8 @@ to set-up the environment use uv (if you do not have it install it: curl -LsSf h
 uv sync
 source .venv/bin/activate
 
-to train the model do
-python3 train.py
+to train the model on digits do
+python3 digit_train.py
+
+to train the model on gsm8k do
+python3 gsm8k train.py 

@@ -11,11 +11,11 @@ beta = 0.01
 def format_reward(output, target):
     extracted = re.findall(pattern, output)
     if len(extracted) == 0:
-        return -1
+        return 0
     elif len(extracted[0]) > 0:
-        return 1
+        return 2
     else:
-        return -1
+        return 1
 
 
 def accuracy_reward(output, target):
@@ -38,14 +38,13 @@ def length_reward(output, target):
     output = output.split(end_token)[0]
     return - (max(0, len(output)-40)) * 0.001
 
-def compute_rewards(outputs, target):
+def compute_rewards(outputs, targets):
     rewards = []
 
-    targets = [target] * len(outputs)
     for output, target in zip(outputs, targets):
         cur_reward = 0
-        # cur_reward += format_reward(output, target)
-        cur_reward += accuracy_reward(output, target)
+        cur_reward += 0.01 * format_reward(output, target)
+        cur_reward += 10 * accuracy_reward(output, target)
         # cur_reward += length_reward(output, target)
         rewards.append(cur_reward)
     
